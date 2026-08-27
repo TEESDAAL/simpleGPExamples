@@ -1,0 +1,1 @@
+This example mirrors the example from the ECJ guide and should serve as a good basis to compare these libraries.

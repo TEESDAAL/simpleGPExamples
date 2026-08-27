@@ -1,0 +1,30 @@
+parent.0 = ./koza.params
+
+eval.problem = linear_regression.ecj.MultiValuedRegression
+eval.problem.data = linear_regression.ecj.DoubleData
+
+
+
+# the next four items are already defined in koza.params, but we
+# put them here to be clear.
+
+# We have one function set, of class GPFunctionSet
+gp.fs.size = 1
+gp.fs.0 = ec.gp.GPFunctionSet
+# We'll call the function set "f0".
+gp.fs.0.name = f0
+
+# We have five functions in the function set.  They are:
+gp.fs.0.size = 5
+
+gp.fs.0.func.0 = linear_regression.ecj.terminal.X
+gp.fs.0.func.0.nc = nc0
+gp.fs.0.func.1 = linear_regression.ecj.terminal.Y
+
+gp.fs.0.func.1.nc = nc0
+gp.fs.0.func.2 = linear_regression.ecj.nonTerminal.Add
+gp.fs.0.func.2.nc = nc2
+gp.fs.0.func.3 = linear_regression.ecj.nonTerminal.Sub
+gp.fs.0.func.3.nc = nc2
+gp.fs.0.func.4 = linear_regression.ecj.nonTerminal.Mul
+gp.fs.0.func.4.nc = nc2
