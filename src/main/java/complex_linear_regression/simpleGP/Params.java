@@ -6,99 +6,132 @@ import gp.core.fitness.Goal;
 import gp.core.fitness.SingleObjectiveFitness;
 import gp.core.individual.AssessedIndividual;
 import gp.core.initializer.Initialiser;
-import gp.core.initializer.PrimitiveSet;
-import gp.core.initializer.PrimitiveSetBuilder;
+import gp.core.primitive_set.PrimitiveSet;
+import gp.core.primitive_set.PrimitiveSetBuilder;
 import gp.core.selector.Sampler;
 import gp.core.statistic.Statistic;
+import gp.core.statistic.StatisticBuilder;
 import gp.impl.breeder.NaiveBreeder;
-import gp.impl.genetic_operators.CrossOver;
-import gp.impl.genetic_operators.Identity;
-import gp.impl.genetic_operators.SubtreeMutation;
+import gp.impl.genetic_operator.Identity;
+import gp.impl.genetic_operator.SimpleGeneticOperator;
+import gp.impl.genetic_operator.SingleTreeCrossover;
+import gp.impl.genetic_operator.crossover.CommonNodeCounts;
+import gp.impl.genetic_operator.mutation.SingleTreeSubtreeMutation;
 import gp.impl.individual.SingleTreeIndividual;
-import gp.impl.initializers.Initializers;
-import gp.impl.selectors.Elitism;
-import gp.impl.selectors.TournamentSelection;
-import gp.impl.selectors.random.ProbabilisticElement;
-import gp.impl.selectors.random.WeightedRandomSampler;
+import gp.impl.initializer.Initialisers;
+import gp.impl.selector.Elitism;
+import gp.impl.selector.TournamentSelection;
+import gp.impl.selector.random.ProbabilisticElement;
+import gp.impl.selector.random.WeightedRandomSampler;
+import gp.impl.statistic.DoubleData;
 import gp.impl.statistic.EvaluationFunctions;
 import gp.impl.statistic.NumericUtils;
-import utils.Pair;
-import utils.operators.Operator;
-import utils.random.RandomSource;
+import util.random.RandomSource;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.function.BiFunction;
 import java.util.stream.IntStream;
+
+import static gp.impl.individual.tree.tree_utils.CommonTypeTokens.DOUBLE;
+
+record Point2D(double x, double y) {}
 
 public class Params {
     final RandomSource random = RandomSource.of(42);
     final int populationSize = 1000;
     final int numGens = 50;
 
-    final PrimitiveSet<Pair<Double, Double>> primitiveSet = PrimitiveSetBuilder.<Pair<Double, Double>>empty()
-        .addNonTerminal("+", Double::sum, Double.class, Double.class, Double.class)
-        .addNonTerminal("-", (a, b) -> a - b, Double.class, Double.class, Double.class)
-        .addNonTerminal("*", (a, b) -> a * b, Double.class, Double.class, Double.class)
-        .addNonTerminal("%", NumericUtils.SAFE_DIVISION, Double.class, Double.class, Double.class)
-        .addNonTerminal("min", Math::min, Double.class, Double.class, Double.class)
-        .addNonTerminal("min", Math::max, Double.class, Double.class, Double.class)
-        .addNonTerminal("neg", a -> -a, Double.class, Double.class)
-        .addTerminal("x", Pair::first, Double.class)
-        .addTerminal("y", Pair::second, Double.class)
-        .build();
+    final PrimitiveSet<Point2D> primitiveSet = PrimitiveSetBuilder
+            .<Point2D, Double>withDefaultType(DOUBLE)
+            .addBinaryFunction("+", Double::sum)
+            .addBinaryFunction("-", (a, b) -> a - b)
+            .addBinaryFunction("*", (a, b) -> a * b)
+            .addBinaryFunction("%", NumericUtils.SAFE_DIVISION)
+            .addBinaryFunction("min", Math::min)
+            .addBinaryFunction("min", Math::max)
+            .addUnaryFunction("neg", a -> -a)
+            .addTerminal("x", Point2D::x)
+            .addTerminal("y", Point2D::y)
+            .build();
 
-    final Initialiser<SingleTreeIndividual<Pair<Double, Double>, Double>> initialiser = Initializers.rampedHalfAndHalf(
-        8,
-        random,
-        primitiveSet,
-        populationSize,
-        100,
-        Double.class
+    final Initialiser<SingleTreeIndividual<Point2D, Double>> initialiser = Initialisers.rampedHalfAndHalf(
+            8,
+            random,
+            primitiveSet,
+            populationSize,
+            100,
+            DOUBLE
     );
 
-    final Sampler<Operator<
-        SingleTreeIndividual<Pair<Double, Double>, Double>,
-        List<SingleTreeIndividual<Pair<Double, Double>, Double>>
-        >> geneticOperators = WeightedRandomSampler.of(
-        random,
-        new Identity<>(),
-        ProbabilisticElement.of(0.01, SingleTreeIndividual.operator(new SubtreeMutation<>(
-            random, primitiveSet,
-            17, 1
-        ))),
-        ProbabilisticElement.of(0.9, SingleTreeIndividual.operator(new CrossOver<>(random, 17, 1)))
+    final Sampler<SimpleGeneticOperator<
+            SingleTreeIndividual<Point2D, Double>
+    >> geneticOperators = WeightedRandomSampler.of(
+            random,
+            Identity.of(
+                    (i, l) -> SingleTreeIndividual.of(i.tree(), l)
+            ),
+            ProbabilisticElement.of(
+                    0.01, new SingleTreeSubtreeMutation<>(
+                            random,
+                            primitiveSet,
+                            17,
+                            1
+                    )
+            ),
+            ProbabilisticElement.of(
+                    0.9,
+                    new SingleTreeCrossover<>(
+                            random,
+                            17,
+                            10,
+                            CommonNodeCounts.excludeRoot()
+                    )
+            )
     );
 
     final Breeder<AssessedIndividual<
-        Pair<Double, Double>, Double,
-        SingleTreeIndividual<Pair<Double, Double>, Double>,
-        SingleObjectiveFitness
-        >, SingleTreeIndividual<Pair<Double, Double>, Double>> breeder = new NaiveBreeder<>(
-        geneticOperators,
-        populationSize,
-        TournamentSelection.of(random, 7, SingleObjectiveFitness.directlyCompare()),
-        Elitism.of(10, SingleObjectiveFitness.directlyCompare())
+            Point2D, Double,
+            SingleTreeIndividual<Point2D, Double>,
+            SingleObjectiveFitness
+    >, SingleTreeIndividual<Point2D, Double>> breeder = new NaiveBreeder<>(
+            geneticOperators,
+            populationSize,
+            TournamentSelection.of(
+                    random,
+                    7,
+                    SingleObjectiveFitness.directComparison()
+            ),
+            Elitism.of(10, SingleObjectiveFitness.directComparison())
     );
 
-    BiFunction<Double, Double, Double> trueFunction = (x, y) -> Math.cos(y) * Math.exp(Math.sin(x));
+    BiFunction<Double, Double, Double> trueFunction =
+            (x, y) -> Math.cos(y) * Math.exp(Math.sin(x));
 
     final IndividualAssessor<
-        Pair<Double, Double>, Double,
-        SingleTreeIndividual<Pair<Double, Double>, Double>,
-        SingleObjectiveFitness
+            Point2D, Double,
+            SingleTreeIndividual<Point2D, Double>,
+            SingleObjectiveFitness
     > assessor = new IndividualAssessor<>() {
         @Override
-        public SingleObjectiveFitness evaluate(SingleTreeIndividual<Pair<Double, Double>, Double> individual) {
+        public SingleObjectiveFitness assessIndividual(
+                SingleTreeIndividual<Point2D, Double> individual
+        ) {
             return SingleObjectiveFitness.of(
-                IntStream.range(0, 100)
-                    .mapToObj(_ -> Pair.of(
-                        random.nextDouble(-Math.PI, Math.PI),
-                        random.nextDouble(-Math.PI, Math.PI)
-                    )).map(p -> Pair.of(individual.evaluate(p), p.reduce(trueFunction)))
-                    .mapToDouble(p -> p.reduce((a, b) -> Math.abs(a-b)))
-                    .sum(),
-                Goal.MINIMIZE
+                    IntStream.range(0, 100)
+                            .mapToObj(_ -> new Point2D(
+                                    random.nextDouble(
+                                            -Math.PI,
+                                            Math.PI
+                                    ),
+                                    random.nextDouble(
+                                            -Math.PI,
+                                            Math.PI
+                                    )
+                            )).map(p -> DoubleData.of(
+                                    individual.evaluate(p),
+                                    trueFunction.apply(p.x(), p.y())
+                            ))
+                            .collect(EvaluationFunctions.SUM_ABSOLUTE_ERROR),
+                    Goal.MINIMIZE
             );
         }
 
@@ -109,13 +142,25 @@ public class Params {
     };
 
     final Statistic<AssessedIndividual<
-        Pair<Double, Double>, Double,
-        SingleTreeIndividual<Pair<Double, Double>, Double>,
-        SingleObjectiveFitness
-    >, String> statistics = pop -> {
-        double[] fitnesses = pop.stream().mapToDouble(i -> i.fitness().score()).toArray();
-        return "BEST: " + Arrays.stream(fitnesses).min().orElse(-1) + " AVG POP SIZE: " + pop.stream().mapToInt(i->i.individual().tree().size()).average().orElse(0.0);
-    };
-
-
+            Point2D, Double,
+            SingleTreeIndividual<Point2D, Double>,
+            SingleObjectiveFitness
+    >, String> statistics = StatisticBuilder.<
+                    Point2D, Double,
+                    SingleTreeIndividual<Point2D, Double>,
+                    SingleObjectiveFitness
+            >separator(": ", "\n")
+            .ofFitnesses(
+                    "BEST",
+                    fit -> fit
+                            .mapToDouble(SingleObjectiveFitness::score)
+                            .min()
+            )
+            .ofIndividuals(
+                    "AVG POP SIZE",
+                    inds -> inds
+                            .mapToInt(i -> i.tree().size())
+                            .average()
+            )
+            .build();
 }
