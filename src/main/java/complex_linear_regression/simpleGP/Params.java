@@ -1,5 +1,6 @@
 package complex_linear_regression.simpleGP;
 
+import ec.util.MersenneTwisterFast;
 import gp.core.assessor.IndividualAssessor;
 import gp.core.breeder.Breeder;
 import gp.core.fitness.Goal;
@@ -31,6 +32,7 @@ import util.random.RandomSource;
 import java.util.function.BiFunction;
 import java.util.stream.IntStream;
 
+import static complex_linear_regression.ecj.MultiValuedRegression.computeScore;
 import static gp.impl.individual.tree.tree_utils.CommonTypeTokens.DOUBLE;
 
 record Point2D(double x, double y) {}
@@ -111,26 +113,14 @@ public class Params {
             SingleTreeIndividual<Point2D, Double>,
             SingleObjectiveFitness
     > assessor = new IndividualAssessor<>() {
+        final MersenneTwisterFast random = new MersenneTwisterFast(12);
         @Override
         public SingleObjectiveFitness assessIndividual(
                 SingleTreeIndividual<Point2D, Double> individual
         ) {
+            double score = computeScore(random, (x, y) -> individual.evaluate(new Point2D(x, y))).score();
             return SingleObjectiveFitness.of(
-                    IntStream.range(0, 100)
-                            .mapToObj(_ -> new Point2D(
-                                    random.nextDouble(
-                                            -Math.PI,
-                                            Math.PI
-                                    ),
-                                    random.nextDouble(
-                                            -Math.PI,
-                                            Math.PI
-                                    )
-                            )).map(p -> DoubleData.of(
-                                    individual.evaluate(p),
-                                    trueFunction.apply(p.x(), p.y())
-                            ))
-                            .collect(EvaluationFunctions.SUM_ABSOLUTE_ERROR),
+                    score,
                     Goal.MINIMIZE
             );
         }
@@ -154,13 +144,13 @@ public class Params {
                     "BEST",
                     fit -> fit
                             .mapToDouble(SingleObjectiveFitness::score)
-                            .min()
+                            .min().orElseThrow()
             )
             .ofIndividuals(
                     "AVG POP SIZE",
                     inds -> inds
                             .mapToInt(i -> i.tree().size())
-                            .average()
+                            .average().orElseThrow()
             )
             .build();
 }
